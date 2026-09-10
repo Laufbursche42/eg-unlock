@@ -46,7 +46,7 @@ window.I18N = {
     lblEkfv: "eKFV (km/h)",
     btnUnlock: "Entsperren (offen)",
     btnLock: "Sperren (eKFV)",
-    speedValuesHint: "Trage zwei Werte ein: offen und eKFV (Standard 20). Der Knopf Entsperren schreibt den offenen Wert als Höchstgeschwindigkeit, Sperren den eKFV-Wert. Die Seite sendet dabei <code>07 01</code> (Grenze aktiv) gefolgt von <code>08 &lt;km/h&gt;</code> auf die Characteristic <code>BCCAE7E1</code>. Ob der Controller den hohen Wert wirklich fährt, zeigt erst der Test am Fahrzeug. Beide Werte merkt sich der Browser.",
+    speedValuesHint: "Trage zwei Werte ein: offen und eKFV (Standard 20). Der Knopf Entsperren schreibt den offenen Wert als Höchstgeschwindigkeit, Sperren den eKFV-Wert. Die Seite sendet dabei <code>08 &lt;km/h&gt;</code> auf die Characteristic <code>BCCAE7E1</code> - genau wie die App (ein separater An/Aus-Befehl existiert nicht, Maximum 45). Hinweis: offiziell zeigt die App diesen Schalter nur beim GTs; bei anderen Modellen entscheidet die Firmware, ob sie den Wert annimmt. Beide Werte merkt sich der Browser.",
 
     eyTitle: "Geschwindigkeit (X-Mode / Stufe)",
     lblGear: "Stufe",
@@ -66,7 +66,7 @@ window.I18N = {
     modeHint: "Operation-Kommando 6 auf der Characteristic <code>7D971CD1</code>. Der Fahrmodus beeinflusst Beschleunigung und Vortrieb. Die harte Grenze setzt aber die Geschwindigkeit oben, nicht der Modus.",
 
     moreTitle: "Weitere Einstellungen",
-    moreHint: "Zusätzliche Funktionen, die dein Modell laut Code unterstützt. Es erscheint nur, was dein Modell kann.",
+    moreHint: "Zusätzliche Funktionen, die dein Modell laut Code unterstützt. Es erscheint nur, was dein Modell kann. Der Tempomat ist ein ruhender EY-Protokoll-Frame, den die offizielle App nicht sendet - hier experimentell zum Ausprobieren.",
     lblBright: "Display-Helligkeit",
     brAuto: "Automatisch",
     br25: "25 %",
@@ -116,7 +116,7 @@ window.I18N = {
     lblUnlockCode: "Display-Entsperrcode",
     unlockCodePh: "4 Zeichen",
     lblCustName: "Kundenname",
-    lblCruise: "Tempomat",
+    lblCruise: "Tempomat (experimentell)",
 
     immobTitle: "Diebstahlsperre",
     immobHint: "Wegfahrsperre des Scooters (Diebstahlschutz). Hat nichts mit der Geschwindigkeit zu tun. Modern: Operation-Kommando 2. Bei EY eigene Kommandos.",
@@ -194,7 +194,7 @@ window.I18N = {
     lblEkfv: "eKFV (km/h)",
     btnUnlock: "Unlock (open)",
     btnLock: "Lock (eKFV)",
-    speedValuesHint: "Enter two values: open and eKFV (default 20). Unlock writes the open value as the top speed, Lock the eKFV value. The page sends <code>07 01</code> (limit active) followed by <code>08 &lt;km/h&gt;</code> on characteristic <code>BCCAE7E1</code>. Whether the controller actually rides the high value is what the test on the vehicle shows. Both values are remembered by the browser.",
+    speedValuesHint: "Enter two values: open and eKFV (default 20). Unlock writes the open value as the top speed, Lock the eKFV value. The page sends <code>08 &lt;km/h&gt;</code> on characteristic <code>BCCAE7E1</code>, exactly like the app (there is no separate on/off command, max 45). Note: officially the app only shows this control on the GTs; on other models the firmware decides whether it accepts the value. Both values are remembered by the browser.",
 
     eyTitle: "Speed (X-mode / gear)",
     lblGear: "Gear",
@@ -214,7 +214,7 @@ window.I18N = {
     modeHint: "Operation command 6 on characteristic <code>7D971CD1</code>. The ride mode affects acceleration and drive. The hard limit is set by the speed above, not the mode.",
 
     moreTitle: "More settings",
-    moreHint: "Extra functions your model supports per the code. Only what your model can do is shown.",
+    moreHint: "Extra functions your model supports per the code. Only what your model can do is shown. Cruise control is a dormant EY protocol frame the official app never sends - offered here experimentally to try.",
     lblBright: "Display brightness",
     brAuto: "Automatic",
     br25: "25 %",
@@ -264,7 +264,7 @@ window.I18N = {
     lblUnlockCode: "Display unlock code",
     unlockCodePh: "4 chars",
     lblCustName: "Customer name",
-    lblCruise: "Cruise control",
+    lblCruise: "Cruise control (experimental)",
 
     immobTitle: "Immobilizer",
     immobHint: "The scooter immobilizer (anti-theft). Nothing to do with speed. Modern: operation command 2. EY uses its own commands.",

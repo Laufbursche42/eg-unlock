@@ -8,7 +8,7 @@
  */
 
 // Bump VER on every release and set the matching ?v=VER on the script/style tags in index.html.
-const VER = '7';
+const VER = '8';
 const BUILD = 'v' + VER;
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
@@ -315,9 +315,10 @@ function parseBatDiag(b) {
 async function sendSettings(op, payload) { await writeCmd(U.SET_CMD, [op].concat(payload || [])); }
 async function sendOperation(op, payload) { await writeCmd(U.OP_CMD, [op].concat(payload || [])); }
 async function setSpeedLimit(kmh) {
-  await sendSettings(7, [1]);
+  // The official app sends only SetSpeedLimit (opcode 8) with the km/h byte. Opcode 7
+  // (SetSpeedLimitEnabled) is a dead constant, never sent, so we do not send it either.
   await sendSettings(8, [kmh & 0xff]);
-  logSys('speed limit ' + kmh + ' km/h (07 01 / 08 ' + (kmh & 0xff).toString(16).padStart(2, '0').toUpperCase() + ')');
+  logSys('speed limit ' + kmh + ' km/h (08 ' + (kmh & 0xff).toString(16).padStart(2, '0').toUpperCase() + ')');
 }
 // Free display text: clear (op 12), send one 18-byte ASCII frame (op 4, frame index 0), show (op 13).
 async function setFreeText(s) {

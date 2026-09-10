@@ -8,7 +8,7 @@
  */
 
 // Bump VER on every release and set the matching ?v=VER on the script/style tags in index.html.
-const VER = '9';
+const VER = '10';
 const BUILD = 'v' + VER;
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
@@ -73,6 +73,7 @@ const short = (u) => String(u).slice(0, 8).toUpperCase();
 const LS = { THEME: 'eg_theme', MODEL: 'eg_model', OPEN: 'eg_open', EKFV: 'eg_ekfv' };
 
 let dev = null, server = null, chars = {}, model = 'auto', busy = false;
+let curSpeedLimit = null;   // current km/h limit read live from SETTINGS_STATUS, or null if unknown
 function cap() { return MODELS[model] || null; }
 function fam() { const c = cap(); return c ? c.fam : 'auto'; }
 
@@ -129,6 +130,7 @@ function applyLang() {
   { const el = $('build-ver'); if (el) el.textContent = t('buildLabel') + ' ' + BUILD; }
   document.querySelectorAll('#langs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   buildModelDropdown();
+  updateSpeedUI();
   { const el = $('status'); setStatus(el ? el.dataset.state : 'disconnected'); }
   { const dark = document.documentElement.getAttribute('data-theme') !== 'light';
     const el = $('btn-theme'); if (el) { el.setAttribute('aria-label', t(dark ? 'themeToLight' : 'themeToDark')); el.title = el.getAttribute('aria-label'); } }
@@ -211,7 +213,7 @@ function setStatus(s) {
   if (cb) { const on = (s === 'connecting' || s === 'linking' || s === 'connected'); cb.textContent = on ? t('btnDisconnect') : t('btnConnect'); cb.dataset.act = on ? 'disconnect' : 'connect'; }
 }
 function setControlsEnabled(on) {
-  ['btn-unlock','btn-lock','btn-gear','gear-in','btn-mode','mode-in','btn-bright','bright-in','btn-headlight','headlight-in',
+  ['btn-toggle','btn-gear','gear-in','btn-mode','mode-in','btn-bright','bright-in','btn-headlight','headlight-in',
    'btn-light','light-in','btn-unit','unit-in','btn-reset-trip','btn-reset-total','btn-immob-lock','btn-immob-unlock',
    'btn-lang','lang-in','btn-alwayson','alwayson-in','btn-tempwarn','tempwarn-in','btn-range','range-in',
    'btn-unlockreq','unlockreq-in','btn-unlockcode','unlockcode-in','btn-text','text-in','btn-custname','custname-in','btn-cruise','cruise-in']
@@ -237,6 +239,7 @@ async function connect() {
     await discover();
     setStatus('connected');
     setControlsEnabled(true);
+    updateSpeedUI();
     { const el = $('devinfo'); if (el) el.textContent = t('devPrefix') + ' ' + (dev.name || 'Egret'); }
     logSys('connected, ' + Object.keys(chars).length + ' characteristics');
     if (fam() === 'ey') await startEy(); else await startModern();
@@ -258,7 +261,7 @@ async function discover() {
   const svcs = await server.getPrimaryServices();
   for (const s of svcs) { let cs; try { cs = await s.getCharacteristics(); } catch (_) { continue; } for (const c of cs) chars[c.uuid] = c; }
 }
-function onDisconnected() { setStatus('disconnected'); setControlsEnabled(false); resetTiles(); const el = $('devinfo'); if (el) el.textContent = ''; logSys('disconnected'); }
+function onDisconnected() { setStatus('disconnected'); setControlsEnabled(false); resetTiles(); curSpeedLimit = null; updateSpeedUI(); const el = $('devinfo'); if (el) el.textContent = ''; logSys('disconnected'); }
 function disconnect() { if (dev && dev.gatt.connected) dev.gatt.disconnect(); }
 
 // --------------------------- modern telemetry + commands ---------------------------
@@ -269,6 +272,8 @@ async function startModern() {
   await subscribe(U.BAT_STD, b => { if (b.length) setTile('t-batt', b[0] + ' %'); });
   await subscribe(U.DIA_STAT, parseDiag);
   await subscribe(U.OP_ODO, parseOdo);
+  await subscribe(U.SET_STAT, parseSettings);
+  await tryRead(U.SET_STAT, parseSettings);
   await tryRead(U.OP_STAT, parseOpStatus);
   await tryRead(U.BAT_LVL, b => { if (b.length) setTile('t-batt', b[0] + ' %'); });
   await tryRead(U.OP_ODO, parseOdo);
@@ -305,6 +310,24 @@ function parseBatDiag(b) {
   if (b.length < 6) return;
   setTile('t-volt', (((b[2] << 8) | b[3]) / 10).toFixed(1) + ' V');
   setTile('t-current', (((b[4] << 8) | b[5]) / 10).toFixed(1) + ' A');
+}
+// SETTINGS_STATUS (BCCAE7E2, Settings.fromBytes): byte0 bit2 = speedLimitEnabled, byte11 = speed limit
+// (the byte equals km/h on current firmware). Read live so one button can label itself from device state.
+function parseSettings(b) {
+  if (b.length < 12) return;
+  curSpeedLimit = b[11] & 0xff;
+  updateSpeedUI();
+}
+function updateSpeedUI() {
+  const cur = curSpeedLimit;
+  const info = $('speed-current');
+  if (info) info.textContent = (cur == null) ? t('speedCurUnknown') : (t('speedCurPrefix') + ' ' + cur + ' km/h');
+  const b = $('btn-toggle'); if (!b) return;
+  const ekfv = parseInt(($('ekfv-in') || {}).value, 10) || 20;
+  // Locked = current limit at or below the eKFV value (throttled). Unknown -> offer unlock by default.
+  const locked = (cur == null) ? true : (cur <= ekfv);
+  b.dataset.mode = locked ? 'unlock' : 'lock';
+  b.textContent = locked ? t('btnUnlock') : t('btnLock');
 }
 async function sendSettings(op, payload) { await writeCmd(U.SET_CMD, [op].concat(payload || [])); }
 async function sendOperation(op, payload) { await writeCmd(U.OP_CMD, [op].concat(payload || [])); }
@@ -518,16 +541,17 @@ window.addEventListener('DOMContentLoaded', () => {
   $('model-in').addEventListener('change', e => { setModel(e.target.value, true); const c = cap(); logLine('', 'model: ' + (c ? c.label : 'auto detect') + ' [' + transportDesc(c) + ']'); });
   $('btn-conn').addEventListener('click', () => { if ($('btn-conn').dataset.act === 'disconnect') disconnect(); else guard(connect); });
   { const o = $('open-in'); if (o) o.addEventListener('change', () => { try { localStorage.setItem(LS.OPEN, o.value); } catch (e) {} }); }
-  { const k = $('ekfv-in'); if (k) k.addEventListener('change', () => { try { localStorage.setItem(LS.EKFV, k.value); } catch (e) {} }); }
+  { const k = $('ekfv-in'); if (k) k.addEventListener('change', () => { try { localStorage.setItem(LS.EKFV, k.value); } catch (e) {} updateSpeedUI(); }); }
 
-  // Two send-only buttons, no remembered state: Unlock always writes the open value, Lock the eKFV value.
-  const sendSpeedFrom = (id) => guard(async () => {
+  // Single button, labeled from the live device state (SETTINGS_STATUS byte 11). Unlock writes the open
+  // value, Lock the eKFV value. The label follows the real limit reported by the scooter, not a DOM flag.
+  $('btn-toggle').addEventListener('click', () => guard(async () => {
+    const id = ($('btn-toggle').dataset.mode === 'lock') ? 'ekfv-in' : 'open-in';
     const v = parseInt($(id).value, 10);
     if (!(v >= 1 && v <= 99)) { logErr('enter a value 1..99'); return; }
     await setSpeedLimit(v);
-  });
-  $('btn-unlock').addEventListener('click', () => sendSpeedFrom('open-in'));
-  $('btn-lock').addEventListener('click', () => sendSpeedFrom('ekfv-in'));
+    // The device reports the new limit via SETTINGS_STATUS notify -> updateSpeedUI flips the label.
+  }));
 
   $('btn-gear').addEventListener('click', () => guard(() => eyGear($('gear-in').value)));
   $('btn-mode').addEventListener('click', () => guard(() => sendOperation(6, [parseInt($('mode-in').value, 10) & 0xff])));

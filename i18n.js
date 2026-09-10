@@ -48,6 +48,9 @@ window.I18N = {
     btnLock: "Sperren (eKFV)",
     speedValuesHint: "Trage zwei Werte ein: offen und eKFV (Standard 20). Der Knopf Entsperren schreibt den offenen Wert als Höchstgeschwindigkeit, Sperren den eKFV-Wert. Die Seite sendet dabei <code>08 &lt;km/h&gt;</code> auf die Characteristic <code>BCCAE7E1</code> - genau wie die App (ein separater An/Aus-Befehl existiert nicht, Maximum 45). Hinweis: offiziell zeigt die App diesen Schalter nur beim GTs; bei anderen Modellen entscheidet die Firmware, ob sie den Wert annimmt. Beide Werte merkt sich der Browser.",
 
+    speedCurPrefix: "Aktuelles Limit:",
+    speedCurUnknown: "Aktuelles Limit: unbekannt (Gerät meldet kein SETTINGS_STATUS)",
+
     eyTitle: "Geschwindigkeit (X-Mode / Stufe)",
     lblGear: "Stufe",
     gearX: "X-Mode (schnellste Stufe)",
@@ -195,6 +198,9 @@ window.I18N = {
     btnUnlock: "Unlock (open)",
     btnLock: "Lock (eKFV)",
     speedValuesHint: "Enter two values: open and eKFV (default 20). Unlock writes the open value as the top speed, Lock the eKFV value. The page sends <code>08 &lt;km/h&gt;</code> on characteristic <code>BCCAE7E1</code>, exactly like the app (there is no separate on/off command, max 45). Note: officially the app only shows this control on the GTs; on other models the firmware decides whether it accepts the value. Both values are remembered by the browser.",
+
+    speedCurPrefix: "Current limit:",
+    speedCurUnknown: "Current limit: unknown (device reports no SETTINGS_STATUS)",
 
     eyTitle: "Speed (X-mode / gear)",
     lblGear: "Gear",

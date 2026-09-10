@@ -8,7 +8,7 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <div class="wrap">
@@ -74,13 +74,13 @@
   <div class="card" id="card-speed" hidden>
     <div class="card-head"><h2 data-t="s3Title"></h2><button type="button" class="help-btn" data-help="speed" aria-label="Info">?</button></div>
     <div class="btns">
-      <button class="primary" id="btn-unlock" data-t="btnUnlock" disabled></button>
-      <button id="btn-lock" data-t="btnLock" disabled></button>
+      <button class="primary span2" id="btn-toggle" disabled></button>
     </div>
     <div class="two">
       <div class="fld"><label data-t="lblOpen"></label><input id="open-in" type="number" step="1" min="1" max="99" value="45"></div>
       <div class="fld"><label data-t="lblEkfv"></label><input id="ekfv-in" type="number" step="1" min="1" max="99" value="20"></div>
     </div>
+    <p class="hint" id="speed-current"></p>
   </div>
 
   <div class="card" id="card-ey" hidden>
@@ -256,7 +256,7 @@
   </div>
 </dialog>
 
-<script src="i18n.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="i18n.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

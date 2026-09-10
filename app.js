@@ -8,7 +8,7 @@
  */
 
 // Bump VER on every release and set the matching ?v=VER on the script/style tags in index.html.
-const VER = '8';
+const VER = '9';
 const BUILD = 'v' + VER;
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
@@ -129,7 +129,6 @@ function applyLang() {
   { const el = $('build-ver'); if (el) el.textContent = t('buildLabel') + ' ' + BUILD; }
   document.querySelectorAll('#langs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   buildModelDropdown();
-  updateToggleLabel();
   { const el = $('status'); setStatus(el ? el.dataset.state : 'disconnected'); }
   { const dark = document.documentElement.getAttribute('data-theme') !== 'light';
     const el = $('btn-theme'); if (el) { el.setAttribute('aria-label', t(dark ? 'themeToLight' : 'themeToDark')); el.title = el.getAttribute('aria-label'); } }
@@ -212,16 +211,11 @@ function setStatus(s) {
   if (cb) { const on = (s === 'connecting' || s === 'linking' || s === 'connected'); cb.textContent = on ? t('btnDisconnect') : t('btnConnect'); cb.dataset.act = on ? 'disconnect' : 'connect'; }
 }
 function setControlsEnabled(on) {
-  ['btn-toggle','btn-gear','gear-in','btn-mode','mode-in','btn-bright','bright-in','btn-headlight','headlight-in',
+  ['btn-unlock','btn-lock','btn-gear','gear-in','btn-mode','mode-in','btn-bright','bright-in','btn-headlight','headlight-in',
    'btn-light','light-in','btn-unit','unit-in','btn-reset-trip','btn-reset-total','btn-immob-lock','btn-immob-unlock',
    'btn-lang','lang-in','btn-alwayson','alwayson-in','btn-tempwarn','tempwarn-in','btn-range','range-in',
    'btn-unlockreq','unlockreq-in','btn-unlockcode','unlockcode-in','btn-text','text-in','btn-custname','custname-in','btn-cruise','cruise-in']
     .forEach(id => { const e = $(id); if (e) e.disabled = !on; });
-}
-function updateToggleLabel() {
-  const b = $('btn-toggle'); if (!b) return;
-  const locked = b.dataset.state !== 'open';
-  b.textContent = locked ? t('btnUnlock') : t('btnLock');
 }
 
 // --------------------------- connect ---------------------------
@@ -526,15 +520,14 @@ window.addEventListener('DOMContentLoaded', () => {
   { const o = $('open-in'); if (o) o.addEventListener('change', () => { try { localStorage.setItem(LS.OPEN, o.value); } catch (e) {} }); }
   { const k = $('ekfv-in'); if (k) k.addEventListener('change', () => { try { localStorage.setItem(LS.EKFV, k.value); } catch (e) {} }); }
 
-  // eKFV toggle: unlock writes the open value, lock writes the eKFV value; label flips with state.
-  $('btn-toggle').addEventListener('click', () => guard(async () => {
-    const b = $('btn-toggle'), locked = b.dataset.state !== 'open';
-    const v = parseInt((locked ? $('open-in') : $('ekfv-in')).value, 10);
+  // Two send-only buttons, no remembered state: Unlock always writes the open value, Lock the eKFV value.
+  const sendSpeedFrom = (id) => guard(async () => {
+    const v = parseInt($(id).value, 10);
     if (!(v >= 1 && v <= 99)) { logErr('enter a value 1..99'); return; }
     await setSpeedLimit(v);
-    b.dataset.state = locked ? 'open' : 'locked';
-    updateToggleLabel();
-  }));
+  });
+  $('btn-unlock').addEventListener('click', () => sendSpeedFrom('open-in'));
+  $('btn-lock').addEventListener('click', () => sendSpeedFrom('ekfv-in'));
 
   $('btn-gear').addEventListener('click', () => guard(() => eyGear($('gear-in').value)));
   $('btn-mode').addEventListener('click', () => guard(() => sendOperation(6, [parseInt($('mode-in').value, 10) & 0xff])));

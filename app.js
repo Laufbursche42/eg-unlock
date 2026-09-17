@@ -118,7 +118,7 @@ function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-t]').forEach(n => {
     const v = t(n.getAttribute('data-t'));
-    if (/[<&]/.test(v)) n.innerHTML = v; else n.textContent = v;   // our own translation table
+    if (/[<&]/.test(v)) n.innerHTML = v; else n.textContent = v;   // scan-ok: our own translation table
   });
   document.querySelectorAll('[data-t-ph]').forEach(n => { const v = t(n.getAttribute('data-t-ph')); if (v) n.setAttribute('placeholder', v); });
   { const el = $('link-guide'); if (el) el.href = docFile('GUIDE'); }
@@ -143,7 +143,7 @@ function initLangSwitch() {
 function applyTheme(dark) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   const b = $('btn-theme');
-  if (b) { b.innerHTML = dark ? '&#9728;' : '&#9790;'; b.setAttribute('aria-label', t(dark ? 'themeToLight' : 'themeToDark')); b.title = b.getAttribute('aria-label'); }
+  if (b) { b.innerHTML = dark ? '&#9728;' : '&#9790;'; b.setAttribute('aria-label', t(dark ? 'themeToLight' : 'themeToDark')); b.title = b.getAttribute('aria-label'); } // scan-ok: fixed character (sun/moon), not user input
   try { localStorage.setItem(LS.THEME, dark ? 'dark' : 'light'); } catch (e) {}
 }
 function initTheme() {
@@ -157,7 +157,7 @@ function initTheme() {
 function buildModelDropdown() {
   const sel = $('model-in'); if (!sel) return;
   const prev = sel.value || model;
-  sel.innerHTML = '';
+  sel.textContent = '';
   const auto = document.createElement('option');
   auto.value = 'auto'; auto.textContent = t('modelAuto'); sel.appendChild(auto);
   for (const key of Object.keys(MODELS)) {
@@ -193,7 +193,7 @@ function applyModelUI() {
 }
 function buildGearList(withX) {
   const sel = $('gear-in'); if (!sel) return;
-  sel.innerHTML = '';
+  sel.textContent = '';
   if (withX) {
     for (const [v, k] of [['x', 'gearX'], ['x3', 'gearX3']]) {
       const o = document.createElement('option'); o.value = v; o.textContent = t(k); o.setAttribute('data-t', k); sel.appendChild(o);
@@ -492,12 +492,12 @@ function openDocFile(file, titleKey) {
   const mark = (lang === 'de' && !file.includes('.de.') && file !== 'README.md') ? ' ' + t('docEnglish') : '';
   $('doc-title').textContent = (t(titleKey || DOC_TITLES[file] || '') || file) + mark;
   if (typeof dlg.showModal === 'function') dlg.showModal();
-  const showDoc = html => { body.innerHTML = html; const h1 = body.querySelector('h1'); if (h1) { $('doc-title').textContent = h1.textContent.trim() + mark; h1.remove(); } body.scrollTop = 0; };
+  const showDoc = html => { body.innerHTML = html; const h1 = body.querySelector('h1'); if (h1) { $('doc-title').textContent = h1.textContent.trim() + mark; h1.remove(); } body.scrollTop = 0; }; // scan-ok: markdown of our own documents, escaped by mdToHtml first
   if (docCache[file]) { showDoc(docCache[file]); return; }
-  body.innerHTML = '<p>' + escHtml(t('docLoading')) + '</p>';
+  body.innerHTML = '<p>' + escHtml(t('docLoading')) + '</p>'; // scan-ok: escaped
   fetch(file + '?v=' + VER).then(r => { if (!r.ok) throw new Error(r.status + ' ' + r.statusText); return r.text(); })
     .then(txt => { docCache[file] = mdToHtml(txt); showDoc(docCache[file]); })
-    .catch(e => { body.innerHTML = '<p>' + escHtml(t('docFail')) + '</p><pre class="log-err">' + escHtml(file + ': ' + (e && e.message ? e.message : e)) + '</pre>'; });
+    .catch(e => { body.innerHTML = '<p>' + escHtml(t('docFail')) + '</p><pre class="log-err">' + escHtml(file + ': ' + (e && e.message ? e.message : e)) + '</pre>'; }); // scan-ok: escaped
 }
 function wireDocViewer() {
   document.addEventListener('click', e => {
@@ -517,7 +517,7 @@ const HELP = { speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHin
 function openHelp(key) {
   const m = HELP[key]; if (!m) return; const dlg = $('help'); if (!dlg) return;
   $('help-title').textContent = t(m[0]);
-  const bo = $('help-body'); if (bo) { const v = t(m[1]); if (/[<&]/.test(v)) bo.innerHTML = v; else bo.textContent = v; }
+  const bo = $('help-body'); if (bo) { const v = t(m[1]); if (/[<&]/.test(v)) bo.innerHTML = v; else bo.textContent = v; } // scan-ok: our own translation table
   if (dlg.showModal) { try { dlg.showModal(); } catch (e) { dlg.setAttribute('open', ''); } } else dlg.setAttribute('open', '');
 }
 function closeHelp() { const dlg = $('help'); if (dlg && dlg.close) dlg.close(); }

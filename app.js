@@ -7,9 +7,8 @@
  * service 70D1B670 whose characteristics are ...672/673/674.
  */
 
-// Bump VER on every release and set the matching ?v=VER on the script/style tags in index.html.
-const VER = '10';
-const BUILD = 'v' + VER;
+// The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
+const BUILD = 'v13';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -495,7 +494,7 @@ function openDocFile(file, titleKey) {
   const showDoc = html => { body.innerHTML = html; const h1 = body.querySelector('h1'); if (h1) { $('doc-title').textContent = h1.textContent.trim() + mark; h1.remove(); } body.scrollTop = 0; }; // scan-ok: markdown of our own documents, escaped by mdToHtml first
   if (docCache[file]) { showDoc(docCache[file]); return; }
   body.innerHTML = '<p>' + escHtml(t('docLoading')) + '</p>'; // scan-ok: escaped
-  fetch(file + '?v=' + VER).then(r => { if (!r.ok) throw new Error(r.status + ' ' + r.statusText); return r.text(); })
+  fetch(file + '?v=' + BUILD).then(r => { if (!r.ok) throw new Error(r.status + ' ' + r.statusText); return r.text(); })
     .then(txt => { docCache[file] = mdToHtml(txt); showDoc(docCache[file]); })
     .catch(e => { body.innerHTML = '<p>' + escHtml(t('docFail')) + '</p><pre class="log-err">' + escHtml(file + ': ' + (e && e.message ? e.message : e)) + '</pre>'; }); // scan-ok: escaped
 }

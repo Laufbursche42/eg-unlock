@@ -8,7 +8,7 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
 <div class="wrap">
@@ -48,7 +48,7 @@
     <p class="hint" data-t="controlsHint"></p>
   </div>
 
-  <div class="card">
+  <div class="card" id="card-live" hidden>
     <h2 data-t="liveTitle"></h2>
     <div class="grid">
       <div class="tile"><b id="t-speed">-</b><small data-t="tileSpeed"></small></div>
@@ -107,7 +107,7 @@
     </div>
   </div>
 
-  <div class="card" id="card-more">
+  <div class="card" id="card-more" hidden>
     <div class="card-head"><h2 data-t="moreTitle"></h2><button type="button" class="help-btn" data-help="more" aria-label="Info">?</button></div>
     <div class="set-row" id="row-bright" hidden>
       <label data-t="lblBright"></label>
@@ -202,7 +202,7 @@
     </div>
   </div>
 
-  <div class="card" id="card-immob">
+  <div class="card" id="card-immob" hidden>
     <div class="card-head"><h2 data-t="immobTitle"></h2><button type="button" class="help-btn" data-help="immob" aria-label="Info">?</button></div>
     <div class="btns">
       <button id="btn-immob-unlock" data-t="btnImmobUnlock" disabled></button>
@@ -212,9 +212,22 @@
 
   <div class="card">
     <h2 data-t="s6Title"></h2>
+    <div class="log-opts">
+      <div class="log-opt">
+        <span data-t="publicLogLabel"></span>
+        <input type="checkbox" id="public-log" checked>
+        <button type="button" class="help-btn" data-help="publiclog" aria-label="Info">?</button>
+      </div>
+      <div class="log-opt">
+        <span data-t="diagLogLabel"></span>
+        <input type="checkbox" id="diag-log">
+        <button type="button" class="help-btn" data-help="diaglog" aria-label="Info">?</button>
+      </div>
+    </div>
     <div class="btns">
       <button type="button" id="btn-copy-log" data-t="btnCopyLog"></button>
       <button type="button" id="btn-clear-log" data-t="btnClearLog"></button>
+      <button type="button" id="btn-save-log" class="span2" data-t="btnSaveLog"></button>
     </div>
     <pre id="log"></pre>
     <p class="hint"><span class="log-tx" data-t="logTxLegend"></span>, <span class="log-rx" data-t="logRxLegend"></span></p>
@@ -257,7 +270,7 @@
   </div>
 </dialog>
 
-<script src="i18n.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="i18n.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

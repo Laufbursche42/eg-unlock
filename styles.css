@@ -100,6 +100,9 @@ pre#log { margin: 0; background: var(--field); border: 1px solid var(--line); bo
 .log-rx { color: var(--rx); }
 .log-ok { color: var(--good); }
 .log-err { color: var(--bad); }
+.log-opts { margin: 0 0 8px; }
+.log-opt { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 5px; margin: 0 0 4px; }
+.log-opt input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
 .foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 2px; }
 .foot-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; }
 .foot a { color: var(--accent); font-size: 12px; text-decoration: none; }

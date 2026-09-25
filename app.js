@@ -8,7 +8,7 @@
  */
 
 // The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
-const BUILD = 'v13';
+const BUILD = 'v14';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -69,24 +69,64 @@ const MODERN_KEYS = Object.keys(MODELS).filter(k => MODELS[k].fam === 'modern');
 const $ = (id) => document.getElementById(id);
 const hex = (arr) => Array.from(arr, b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
 const short = (u) => String(u).slice(0, 8).toUpperCase();
-const LS = { THEME: 'eg_theme', MODEL: 'eg_model', OPEN: 'eg_open', EKFV: 'eg_ekfv' };
+const LS = { THEME: 'eg_theme', MODEL: 'eg_model', OPEN: 'eg_open', EKFV: 'eg_ekfv', PUBLOG: 'eg_publiclog' };
 
 let dev = null, server = null, chars = {}, model = 'auto', busy = false;
+let connected = false;      // drives card visibility (cards stay hidden until connected)
 let curSpeedLimit = null;   // current km/h limit read live from SETTINGS_STATUS, or null if unknown
 function cap() { return MODELS[model] || null; }
 function fam() { const c = cap(); return c ? c.fam : 'auto'; }
 
 // --------------------------- log ---------------------------
+let logBuffer = [];    // { raw, cls }; sentinels kept, anonymized on display/copy/save
+let publicLog = true;  // anonymize the log (default on; toggled by the Public Log checkbox)
+let diag = false;      // verbose diagnostic logging (default off)
+// One central redaction filter; display/copy/save all pass through anonymize().
+function redact(text) {
+  let s = String(text);
+  if (dev && dev.id) s = s.split(dev.id).join('[redacted-id]');
+  s = s.replace(/\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g, '[redacted-mac]');   // MAC
+  s = s.replace(/\b(secret|token|key|aes|pwd|password|pin|mac|serial|vin|uid|imei)\b(\s*[:=]\s*)("?)([^\s",]+)\3/gi,
+    (m, k, sep) => k + sep + '[redacted]');
+  s = s.replace(/\b[0-9A-Fa-f]{16,}\b/g, '[redacted-hex]');   // long hex runs (ids/serials/keys)
+  return s;
+}
+// Sentinel-marked spans (\x01..\x01, e.g. device name) become XX; then generic redaction - public only.
+function anonymize(s) {
+  if (!publicLog) return String(s).replace(/\x01/g, '');
+  return redact(String(s).replace(/\x01[^\x01]*\x01/g, 'XX').replace(/\x01/g, ''));
+}
 function logLine(cls, text) {
+  logBuffer.push({ raw: text, cls: cls });
   const el = $('log'); if (!el) return;
   const span = document.createElement('span');
-  span.className = cls; span.textContent = text + '\n';
+  if (cls) span.className = cls; span.textContent = anonymize(text) + '\n';
   el.appendChild(span); el.scrollTop = el.scrollHeight;
+}
+// Re-render the whole pane (after the Public Log toggle flips).
+function renderLog() {
+  const el = $('log'); if (!el) return;
+  el.textContent = '';
+  for (const e of logBuffer) { const span = document.createElement('span'); if (e.cls) span.className = e.cls; span.textContent = anonymize(e.raw) + '\n'; el.appendChild(span); }
+  el.scrollTop = el.scrollHeight;
+}
+function logText() { return logBuffer.map(e => anonymize(e.raw)).join('\n'); }
+function saveLog() {
+  try {
+    const blob = new Blob([logText()], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'laufbursche42-egret-log.txt';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    logSys('log saved');
+  } catch (e) { logErr('save failed: ' + (e && e.message ? e.message : e)); }
 }
 const logTx = (u, b) => logLine('log-tx', '>>> ' + short(u) + ' | ' + hex(b));
 const logRx = (u, b) => logLine('log-rx', '<<< ' + short(u) + ' | ' + hex(b));
 const logSys = (t) => logLine('', '--- ' + t);
 const logErr = (t) => logLine('log-err', '!!! ' + t);
+const logDiag = (t) => { if (diag) logLine('', '... ' + t); };   // verbose, only when diagnostics on
 function setTile(id, val) { const el = $(id); if (el) el.textContent = (val == null ? '-' : val); }
 function resetTiles() { ['t-speed','t-batt','t-mode','t-lock','t-light','t-range','t-volt','t-current','t-power','t-throttle','t-odo','t-temp','t-charge','t-err','t-fw','t-serial'].forEach(id => setTile(id, null)); }
 // Big-endian unsigned 24-bit read, used for the odometer fields.
@@ -176,10 +216,15 @@ function applyModelUI() {
   const c = cap();
   const isModern = c && c.fam === 'modern';
   const isEy = c && c.fam === 'ey';
-  // Family-specific speed cards
-  show('card-speed', isModern && c.speed);
-  show('card-ey', isEy);
-  show('card-mode', isModern);
+  // Connection-gated cards: nothing device-facing shows until connected (header, getting-started,
+  // model+connect and the log stay visible; those are not toggled here).
+  show('card-live', connected);
+  show('card-more', connected && (isModern || isEy));
+  show('card-immob', connected);
+  // Family-specific speed cards (also connection-gated)
+  show('card-speed', connected && isModern && c.speed);
+  show('card-ey', connected && isEy);
+  show('card-mode', connected && isModern);
   // More-settings rows
   show('row-bright', isModern && !!c.bright);
   show('row-headlight', isModern && !!c.headlight);
@@ -198,7 +243,7 @@ function buildGearList(withX) {
       const o = document.createElement('option'); o.value = v; o.textContent = t(k); o.setAttribute('data-t', k); sel.appendChild(o);
     }
   }
-  for (let g = 0; g <= 7; g++) { const o = document.createElement('option'); o.value = String(g); o.textContent = (lang === 'de' ? 'Stufe ' : 'Gear ') + g; sel.appendChild(o); }
+  for (let g = 0; g <= 7; g++) { const o = document.createElement('option'); o.value = String(g); o.textContent = t('gearPrefix') + g; sel.appendChild(o); }
 }
 
 // --------------------------- status ---------------------------
@@ -231,20 +276,24 @@ async function connect() {
     else opts = { filters: [{ namePrefix: 'EGRET' }, { namePrefix: 'Egret' }, { namePrefix: 'EY' }, { namePrefix: 'YD' }, { services: [U.ID_SVC] }, { services: [U.EY_SVC] }], optionalServices: MODERN_OPT_SVCS.concat([U.EY_SVC]) };
     dev = await navigator.bluetooth.requestDevice(opts);
     dev.addEventListener('gattserverdisconnected', onDisconnected);
-    logSys('device: ' + (dev.name || '(no name)'));
+    logSys('device: \x01' + (dev.name || '(no name)') + '\x01');   // name masked when Public Log is on
     if (model === 'auto') autoDetect(dev.name || '');
     setStatus('linking');
     server = await dev.gatt.connect();
     await discover();
     setStatus('connected');
+    connected = true;
     setControlsEnabled(true);
+    applyModelUI();   // reveal the cards applicable to the (auto-detected) model
     updateSpeedUI();
     { const el = $('devinfo'); if (el) el.textContent = t('devPrefix') + ' ' + (dev.name || 'Egret'); }
     logSys('connected, ' + Object.keys(chars).length + ' characteristics');
     if (fam() === 'ey') await startEy(); else await startModern();
   } catch (e) {
     logErr('connect failed: ' + (e && e.message ? e.message : e));
+    connected = false;
     setStatus('disconnected');
+    applyModelUI();
   }
 }
 function autoDetect(name) {
@@ -260,7 +309,7 @@ async function discover() {
   const svcs = await server.getPrimaryServices();
   for (const s of svcs) { let cs; try { cs = await s.getCharacteristics(); } catch (_) { continue; } for (const c of cs) chars[c.uuid] = c; }
 }
-function onDisconnected() { setStatus('disconnected'); setControlsEnabled(false); resetTiles(); curSpeedLimit = null; updateSpeedUI(); const el = $('devinfo'); if (el) el.textContent = ''; logSys('disconnected'); }
+function onDisconnected() { connected = false; setStatus('disconnected'); setControlsEnabled(false); applyModelUI(); resetTiles(); curSpeedLimit = null; updateSpeedUI(); const el = $('devinfo'); if (el) el.textContent = ''; logSys('disconnected'); }
 function disconnect() { if (dev && dev.gatt.connected) dev.gatt.disconnect(); }
 
 // --------------------------- modern telemetry + commands ---------------------------
@@ -425,12 +474,14 @@ async function subscribe(uuid, handler) {
   const c = chars[uuid]; if (!c) return false;
   try {
     await c.startNotifications();
+    logDiag('subscribed ' + short(uuid));
     c.addEventListener('characteristicvaluechanged', ev => { const b = new Uint8Array(ev.target.value.buffer); logRx(uuid, b); handler(Array.from(b)); });
     return true;
   } catch (e) { logErr('notify ' + short(uuid) + ' failed: ' + e.message); return false; }
 }
 async function tryRead(uuid, handler) {
   const c = chars[uuid]; if (!c || !c.properties.read) return;
+  logDiag('read ' + short(uuid));
   try { const v = await c.readValue(); const b = new Uint8Array(v.buffer); logRx(uuid, b); handler(Array.from(b)); } catch (_) {}
 }
 async function writeCmd(uuid, bytes) { const c = chars[uuid]; if (!c) { logErr('characteristic ' + short(uuid) + ' missing'); return; } await writeChar(c, Uint8Array.from(bytes)); }
@@ -512,7 +563,7 @@ function wireDocViewer() {
 }
 
 // --------------------------- help ---------------------------
-const HELP = { speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
+const HELP = { speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
 function openHelp(key) {
   const m = HELP[key]; if (!m) return; const dlg = $('help'); if (!dlg) return;
   $('help-title').textContent = t(m[0]);
@@ -576,8 +627,22 @@ window.addEventListener('DOMContentLoaded', () => {
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });
   { const b = $('link-disclaimer'); if (b) b.addEventListener('click', e => { e.preventDefault(); openHelp('disclaimer'); }); }
 
-  $('btn-clear-log').addEventListener('click', () => { $('log').textContent = ''; logDiagnosticHeader(); eyOk = eySelfTest(); });
-  $('btn-copy-log').addEventListener('click', () => navigator.clipboard.writeText($('log').innerText).then(() => logSys('log copied')).catch(() => {}));
+  // Log options: Public Log anonymizes (default on, persisted); diagnostics adds verbose lines (off).
+  { const cb = $('public-log');
+    if (cb) {
+      let saved = null; try { saved = localStorage.getItem(LS.PUBLOG); } catch (e) {}
+      publicLog = saved !== '0';
+      cb.checked = publicLog;
+      cb.addEventListener('change', () => { publicLog = cb.checked; try { localStorage.setItem(LS.PUBLOG, cb.checked ? '1' : '0'); } catch (e) {} renderLog(); });
+    } }
+  { const cb = $('diag-log');
+    if (cb) {
+      diag = false; cb.checked = false;
+      cb.addEventListener('change', () => { diag = cb.checked; logSys(diag ? 'diagnostic log on' : 'diagnostic log off'); if (diag) logDiagnosticHeader(); });
+    } }
+  $('btn-clear-log').addEventListener('click', () => { logBuffer = []; $('log').textContent = ''; logDiagnosticHeader(); eyOk = eySelfTest(); });
+  $('btn-copy-log').addEventListener('click', () => navigator.clipboard.writeText(logText()).then(() => logSys('log copied')).catch(() => {}));
+  $('btn-save-log').addEventListener('click', saveLog);
 });
 
 // EY convenience commands used by the shared buttons.

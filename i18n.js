@@ -10,8 +10,6 @@ window.I18N = {
     themeToLight: "Auf helle Darstellung umschalten",
     themeToDark: "Auf dunkle Darstellung umschalten",
 
-    sunsetBannerHtml: "<b>Dieses Tool zieht um.</b> Dieses Repo wird <b>nicht mehr weiterentwickelt</b> - bitte wechsle zum neuen Tool: <a href=\"https://lb-tool-web.pages.dev/\" target=\"_blank\" rel=\"noopener\">lb-tool-web.pages.dev</a>. Probleme beim Wechsel? Öffne ein <a href=\"https://github.com/Laufbursche42/Laufbursche42/issues/new\" target=\"_blank\" rel=\"noopener\">Issue auf GitHub</a> oder schick eine <a href=\"https://www.escooter-stammtisch.de/index.php?user/6497-laufbursche/\" target=\"_blank\" rel=\"noopener\">PN im eScooter-Stammtisch</a>.",
-
     s1Title: "So fängst du an",
     sub: "Live über Web Bluetooth mit deinem Egret-E-Scooter reden. Läuft in Bluefy (iOS) oder Chrome bzw. Edge (Android/Desktop). Nichts verlässt dein Gerät.",
     startHintGuide: "Neu hier? In der <a href=\"GUIDE.de.md\" data-doc=\"GUIDE\" data-t=\"footGuide\">Anleitung</a> steht jeder Schritt.",
@@ -162,8 +160,6 @@ window.I18N = {
     langGroup: "Language",
     themeToLight: "Switch to light theme",
     themeToDark: "Switch to dark theme",
-
-    sunsetBannerHtml: "<b>This tool is moving.</b> This repository is <b>no longer maintained</b> - please switch to the new tool: <a href=\"https://lb-tool-web.pages.dev/\" target=\"_blank\" rel=\"noopener\">lb-tool-web.pages.dev</a>. Trouble switching? Open an <a href=\"https://github.com/Laufbursche42/Laufbursche42/issues/new\" target=\"_blank\" rel=\"noopener\">issue on GitHub</a> or send a <a href=\"https://www.escooter-stammtisch.de/index.php?user/6497-laufbursche/\" target=\"_blank\" rel=\"noopener\">PM on the eScooter-Stammtisch forum</a>.",
 
     s1Title: "Getting started",
     sub: "Talk to your Egret scooter live over Web Bluetooth. Runs in Bluefy (iOS) or Chrome/Edge (Android/desktop). Nothing leaves your device.",

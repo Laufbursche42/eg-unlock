@@ -8,7 +8,7 @@
  */
 
 // The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
-const BUILD = 'v14';
+const BUILD = 'v15';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -91,16 +91,28 @@ function redact(text) {
   s = s.replace(/\b[0-9A-Fa-f]{16,}\b/g, '[redacted-hex]');   // long hex runs (ids/serials/keys)
   return s;
 }
+// Unconditional secret scrubber. Runs at the log source (before the buffer), so a bearer token,
+// password or one-time code can never reach the buffer, the display, the copy or the saved file -
+// regardless of the Public Log or diagnostics checkboxes. Keep this independent of publicLog.
+function maskSecrets(text) {
+  let s = String(text);
+  s = s.replace(/eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}/g, '[redacted-jwt]');   // JWT
+  s = s.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***');                                   // bearer header value
+  s = s.replace(/\b(access[_-]?token|refresh[_-]?token|id[_-]?token|token|jwt|password|passwd|pwd|secret|code|otp)\b(\s*[:=]\s*)("?)([^\s",}]+)\3/gi,
+    (m, k, sep) => k + sep + '***');                                                                 // secret key=value
+  return s;
+}
 // Sentinel-marked spans (\x01..\x01, e.g. device name) become XX; then generic redaction - public only.
 function anonymize(s) {
   if (!publicLog) return String(s).replace(/\x01/g, '');
   return redact(String(s).replace(/\x01[^\x01]*\x01/g, 'XX').replace(/\x01/g, ''));
 }
 function logLine(cls, text) {
-  logBuffer.push({ raw: text, cls: cls });
+  const safe = maskSecrets(text);   // scrub secrets before anything is stored or shown
+  logBuffer.push({ raw: safe, cls: cls });
   const el = $('log'); if (!el) return;
   const span = document.createElement('span');
-  if (cls) span.className = cls; span.textContent = anonymize(text) + '\n';
+  if (cls) span.className = cls; span.textContent = anonymize(safe) + '\n';
   el.appendChild(span); el.scrollTop = el.scrollHeight;
 }
 // Re-render the whole pane (after the Public Log toggle flips).
@@ -563,7 +575,7 @@ function wireDocViewer() {
 }
 
 // --------------------------- help ---------------------------
-const HELP = { speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
+const HELP = { speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], firmware: ['fwTitleHelp', 'fwHelpHtml'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
 function openHelp(key) {
   const m = HELP[key]; if (!m) return; const dlg = $('help'); if (!dlg) return;
   $('help-title').textContent = t(m[0]);
@@ -571,6 +583,199 @@ function openHelp(key) {
   if (dlg.showModal) { try { dlg.showModal(); } catch (e) { dlg.setAttribute('open', ''); } } else dlg.setAttribute('open', '');
 }
 function closeHelp() { const dlg = $('help'); if (dlg && dlg.close) dlg.close(); }
+
+// --------------------------- firmware via the Egret account (cloud) ---------------------------
+// This is the only part of the page that leaves the device: it talks to the manufacturer API with the
+// user's own account, like the app. CORS is open (ACAO *), live-verified 2026-10-01. Endpoints and the
+// login response shape are only partially documented, so requests are built defensively and failures
+// are surfaced in the log. Secrets (token, password, code) never enter the log - see maskSecrets.
+const FW_API = 'https://api.my-egret.com';
+const FW_TARGET_PATH = { controller: 'controller-check', display: 'display-check', bluetooth: 'bluetooth-check', bms: 'bms-check' };
+let fwToken = null;     // access token, in memory only (never stored, never logged)
+let fwRefresh = null;   // refresh token, in memory only
+
+function fwAuthHeaders() { return fwToken ? { Authorization: 'Bearer ' + fwToken } : {}; }
+function stripQuery(u) { try { const x = new URL(u); return x.origin + x.pathname; } catch (_) { return String(u).split('?')[0]; } }
+
+// Defensive token extraction: the field names are not firmly documented, so try the common shapes.
+function fwExtractTokens(j) {
+  if (!j || typeof j !== 'object') return false;
+  const nest = (j.data && typeof j.data === 'object') ? j.data : ((j.tokens && typeof j.tokens === 'object') ? j.tokens : null);
+  const pick = (o, keys) => { if (!o) return null; for (const k of keys) { if (typeof o[k] === 'string' && o[k]) return o[k]; } return null; };
+  const accKeys = ['accessToken', 'access_token', 'token', 'jwt', 'idToken', 'id_token'];
+  const refKeys = ['refreshToken', 'refresh_token'];
+  const acc = pick(j, accKeys) || pick(nest, accKeys);
+  const ref = pick(j, refKeys) || pick(nest, refKeys);
+  if (acc) { fwToken = acc; fwRefresh = ref || null; return true; }
+  return false;
+}
+
+// One central request wrapper. Logs method+path and status (normal), failures via logErr, and response
+// keys plus the download source to the diagnostic log only. Bodies are never logged (they may hold secrets).
+async function fwFetch(method, path, body, withAuth) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (withAuth) Object.assign(headers, fwAuthHeaders());
+  logSys('firmware: ' + method + ' ' + path + (withAuth ? ' (auth)' : ''));
+  let res;
+  try {
+    res = await fetch(FW_API + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined });
+  } catch (e) {
+    logErr('firmware: ' + method + ' ' + path + ' network/CORS error: ' + (e && e.message ? e.message : e));
+    throw e;
+  }
+  let data = null;
+  try { const txt = await res.text(); data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
+  if (!res.ok) {
+    const extra = (data && (data.message || data.error)) ? ' (' + (data.message || data.error) + ')' : '';
+    logErr('firmware: ' + method + ' ' + path + ' -> HTTP ' + res.status + ' ' + res.statusText + extra);
+  } else {
+    logSys('firmware: ' + method + ' ' + path + ' -> HTTP ' + res.status);
+    if (data && typeof data === 'object') logDiag('firmware: response keys: ' + Object.keys(data).join(', '));
+  }
+  return { ok: res.ok, status: res.status, data: data };
+}
+
+function fwSetSession(on) {
+  show('fw-login', !on);
+  show('fw-session', on);
+  const s = $('fw-status'); if (s) s.textContent = on ? t('fwLoggedIn') : '';
+  if (on) {
+    const c = cap(); const mi = $('fw-model');
+    if (mi && !mi.value && c && c.fam === 'modern') mi.value = c.label.replace(/^Egret\s+/i, '');
+    const fwTile = $('t-fw'); const vi = $('fw-version');
+    if (vi && !vi.value && fwTile && fwTile.textContent && fwTile.textContent !== '-') vi.value = fwTile.textContent;
+    // After login, always load everything: the full list plus each of the four control units (forced
+    // with version 0 so a download always comes back). Deferred so it runs after the login guard
+    // releases its busy lock.
+    logSys('firmware: loading all firmware (list plus each unit)');
+    setTimeout(() => guard(fwLoadAll), 0);
+  }
+}
+
+// The Egret account login is magic-link only, exactly as the app does it (no e-mail/password route on
+// this API). Flow belegt from decomp.js: POST auth/magic {email} ?lang -> mail with a link; then
+// GET auth/magic/<token> -> {user, token, refreshToken}.
+async function fwMagicRequest() {
+  const email = (($('fw-email') || {}).value || '').trim();
+  if (!email) { logErr('firmware: enter your e-mail first'); return; }
+  const lang = (document.documentElement.getAttribute('lang') || 'de').slice(0, 2);
+  const r = await fwFetch('POST', '/auth/magic?lang=' + encodeURIComponent(lang), { email: email }, false);
+  if (r.ok) logSys('firmware: magic link requested, open the mail from Egret and paste the link below');
+}
+
+// Pull the magic token out of whatever the user pastes: the full link, a deep link or the raw token.
+function fwExtractMagicToken(raw) {
+  let s = String(raw || '').trim();
+  const m = s.match(/auth\/magic\/([^/?#\s]+)/i);
+  if (m) return m[1];
+  if (s.indexOf('/') >= 0) { const seg = s.split(/[?#]/)[0].split('/').filter(Boolean); return seg[seg.length - 1] || ''; }
+  return s;
+}
+
+async function fwMagicVerify() {
+  const tok = fwExtractMagicToken(($('fw-code') || {}).value);
+  if (!tok) { logErr('firmware: paste the magic link or token from the mail first'); return; }
+  const r = await fwFetch('GET', '/auth/magic/' + encodeURIComponent(tok), null, false);
+  if (r.ok && fwExtractTokens(r.data)) { logSys('firmware: magic login ok, token received'); fwSetSession(true); }
+  else if (r.ok) { logErr('firmware: magic verify returned no token (check the diagnostic log for the response keys)'); }
+}
+
+function fwLogout() {
+  fwToken = null; fwRefresh = null;
+  const c = $('fw-code'); if (c) c.value = '';
+  const res = $('fw-results'); if (res) res.textContent = '';
+  fwSetSession(false);
+  logSys('firmware: signed out, token cleared');
+}
+
+// Render one firmware entry. `source` ('list' or 'check') is shown so you can tell where it came from
+// when the same firmware appears from both.
+function fwRenderEntry(container, item, source) {
+  if (!item || typeof item !== 'object') return;
+  const target = item.updateTarget != null ? String(item.updateTarget) : (item.target != null ? String(item.target) : '?');
+  const version = item.newVersion || item.version || '?';
+  const dl = item.download || item.url || item.downloadUrl || '';
+  const src = source === 'check' ? t('fwSrcCheck') : (source === 'list' ? t('fwSrcList') : '');
+  const row = document.createElement('div'); row.className = 'set-row';
+  const label = document.createElement('label');
+  label.textContent = target + ' - ' + t('fwResultVersion') + ' ' + version +
+    (item.updateAvailable != null ? ' (' + (item.updateAvailable ? t('fwUpdateYes') : t('fwUpdateNo')) + ')' : '') +
+    (src ? ' [' + src + ']' : '');
+  row.appendChild(label);
+  if (dl) {
+    const b = document.createElement('button'); b.textContent = t('fwBtnDownload');
+    b.addEventListener('click', () => guard(() => fwDownload(dl, target, version)));
+    row.appendChild(b);
+  } else {
+    const s = document.createElement('small'); s.textContent = t('fwNoDownload'); row.appendChild(s);
+  }
+  container.appendChild(row);
+}
+
+async function fwList(keep) {
+  const cont = $('fw-results'); if (cont && !keep) cont.textContent = '';
+  const r = await fwFetch('GET', '/firmware/list', null, true);
+  if (!r.ok || !cont) return 0;
+  const d = r.data;
+  const items = Array.isArray(d) ? d
+    : (d && Array.isArray(d.data) ? d.data
+      : (d && Array.isArray(d.firmware) ? d.firmware
+        : (d && Array.isArray(d.list) ? d.list
+          : (d && typeof d === 'object' ? [d] : []))));
+  for (const it of items) fwRenderEntry(cont, it, 'list');
+  if (!keep && !items.length) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = t('fwNoResults'); cont.appendChild(p); }
+  return items.length;
+}
+
+// versionOverride '0' makes the server return the latest firmware with a download even when the scooter
+// is already up to date (the app itself does this in one branch, decomp.js:890945-890957).
+async function fwCheck(targetArg, keep, versionOverride) {
+  const cont = $('fw-results'); if (cont && !keep) cont.textContent = '';
+  const target = (typeof targetArg === 'string' && targetArg) ? targetArg : (($('fw-target') || {}).value || 'controller');
+  const model = encodeURIComponent(($('fw-model') || {}).value || '');
+  const version = encodeURIComponent(versionOverride != null ? versionOverride : (($('fw-version') || {}).value || ''));
+  const path = '/firmware/' + (FW_TARGET_PATH[target] || 'controller-check') + '?model=' + model + '&version=' + version;
+  const r = await fwFetch('GET', path, null, true);
+  if (!r.ok || !cont) return 0;
+  if (r.data && typeof r.data === 'object') { fwRenderEntry(cont, Object.assign({ updateTarget: target }, r.data), 'check'); return 1; }
+  if (!keep) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = t('fwNoResults'); cont.appendChild(p); }
+  return 0;
+}
+
+// Load everything after login: the combined list plus each of the four control units, so nothing is
+// missed regardless of what the list returns. Renders all hits into one result area.
+async function fwLoadAll() {
+  const cont = $('fw-results'); if (cont) cont.textContent = '';
+  let n = await fwList(true);
+  for (const target of ['controller', 'display', 'bluetooth', 'bms']) n += await fwCheck(target, true, '0');
+  if (cont && !n) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = t('fwNoResults'); cont.appendChild(p); }
+}
+
+function fwTriggerBlobDownload(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function fwDownload(url, target, version) {
+  const name = 'egret-' + String(target).toLowerCase() + '-' + String(version).replace(/[^\w.-]/g, '_') + '.bin';
+  logDiag('firmware: download source ' + stripQuery(url));
+  // Preferred: fetch into a Blob (keeps the bearer and saves straight to Downloads). The download-host
+  // CORS state is unknown, so on any failure fall back to a plain link the browser downloads itself.
+  try {
+    const r = await fetch(url, { headers: fwAuthHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    fwTriggerBlobDownload(blob, name);
+    logSys('firmware: downloaded via fetch -> ' + name + ' (' + blob.size + ' bytes)');
+  } catch (e) {
+    logErr('firmware: blob download failed (' + (e && e.message ? e.message : e) + '), opening as a direct link');
+    const a = document.createElement('a'); a.href = url; a.download = name; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    logSys('firmware: opened direct link for ' + name + ' (needs a context where the host accepts the request)');
+  }
+}
 
 // --------------------------- init ---------------------------
 window.addEventListener('DOMContentLoaded', () => {
@@ -622,6 +827,13 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btn-text').addEventListener('click', () => guard(() => setFreeText($('text-in').value)));
   $('btn-custname').addEventListener('click', () => guard(() => setCustomerName($('custname-in').value)));
   $('btn-cruise').addEventListener('click', () => guard(() => eyCruise($('cruise-in').value === '1')));
+
+  // Firmware (Egret account, cloud). Independent of the BLE connection. Token stays in memory only.
+  { const b = $('fw-btn-magic'); if (b) b.addEventListener('click', () => guard(fwMagicRequest)); }
+  { const b = $('fw-btn-verify'); if (b) b.addEventListener('click', () => guard(fwMagicVerify)); }
+  { const b = $('fw-btn-logout'); if (b) b.addEventListener('click', () => fwLogout()); }
+  { const b = $('fw-btn-list'); if (b) b.addEventListener('click', () => guard(fwList)); }
+  { const b = $('fw-btn-check'); if (b) b.addEventListener('click', () => guard(fwCheck)); }
 
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });

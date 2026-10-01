@@ -2,13 +2,13 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.my-egret.com https://*.my-egret.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title data-t="pageTitle">Laufbursche Egret Tool</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 <div class="wrap">
@@ -210,6 +210,55 @@
     </div>
   </div>
 
+  <div class="card" id="card-fw">
+    <div class="card-head"><h2 data-t="fwTitle"></h2><button type="button" class="help-btn" data-help="firmware" aria-label="Info">?</button></div>
+    <p class="warn" data-t="fwServerNote"></p>
+
+    <div id="fw-login">
+      <div class="set-row">
+        <label data-t="fwEmail"></label>
+        <input id="fw-email" type="email" autocomplete="username" data-t-ph="fwEmailPh">
+      </div>
+      <div class="btns">
+        <button class="primary span2" id="fw-btn-magic" data-t="fwBtnMagic"></button>
+      </div>
+      <p class="hint" data-t="fwMagicHint"></p>
+      <div class="set-row">
+        <label data-t="fwLink"></label>
+        <input id="fw-code" type="text" autocomplete="off" data-t-ph="fwLinkPh">
+      </div>
+      <div class="btns">
+        <button class="primary span2" id="fw-btn-verify" data-t="fwBtnVerify"></button>
+      </div>
+    </div>
+
+    <div id="fw-session" hidden>
+      <p class="hint" id="fw-status"></p>
+      <div class="two">
+        <div class="fld"><label data-t="fwModel"></label><input id="fw-model" type="text" data-t-ph="fwModelPh"></div>
+        <div class="fld"><label data-t="fwVersion"></label><input id="fw-version" type="text" data-t-ph="fwVersionPh"></div>
+      </div>
+      <div class="set-row">
+        <label data-t="fwTarget"></label>
+        <select id="fw-target">
+          <option value="controller" data-t="fwTargetController"></option>
+          <option value="display" data-t="fwTargetDisplay"></option>
+          <option value="bluetooth" data-t="fwTargetBluetooth"></option>
+          <option value="bms" data-t="fwTargetBms"></option>
+        </select>
+        <button id="fw-btn-check" data-t="fwBtnCheck"></button>
+      </div>
+      <div class="btns">
+        <button id="fw-btn-list" class="span2" data-t="fwBtnList"></button>
+      </div>
+      <div id="fw-results"></div>
+      <div class="btns">
+        <button id="fw-btn-logout" class="span2" data-t="fwBtnLogout"></button>
+      </div>
+    </div>
+    <p class="hint" data-t="fwHint"></p>
+  </div>
+
   <div class="card">
     <h2 data-t="s6Title"></h2>
     <div class="log-opts">
@@ -270,7 +319,7 @@
   </div>
 </dialog>
 
-<script src="i18n.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="i18n.js?v=15"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

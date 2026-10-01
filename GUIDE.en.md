@@ -1,7 +1,9 @@
 # Guide
 
 This page talks to your Egret scooter directly over Web Bluetooth. It implements the protocol proven
-from the official Egret app. Nothing leaves your device, there is no server and no tracker.
+from the official Egret app. The Bluetooth part never leaves your device, there is no server of this
+project and no tracker. Only the optional firmware tab talks to your Egret account at api.my-egret.com -
+more on that below.
 
 ## Requirements
 
@@ -28,7 +30,8 @@ On the modern models (X, GT, PRO, ONE, UNIT and so on) you enter two values:
 - **eKFV (km/h):** the legal value (default 20).
 
 The button toggles between them. **Unlock** writes the open value as the top speed, **Lock** the eKFV
-value. Under the hood the page sends `07 01` (limit active) followed by `08 <km/h>`.
+value. Under the hood the page sends `08 <km/h>` to the settings characteristic. The app does not send
+the once-assumed opcode `07`; it is dead code.
 
 EY models have no km/h command. There the lever is the **X-mode** or the gear. X-mode is only present
 on EY1, EY2 and EY2p.
@@ -50,6 +53,31 @@ the display, then the open value. If the limit moves along, your device is tunab
 Depending on the model you also get: ride mode, display brightness, automatic headlights (GT only),
 headlight on/off, unit km/h or mph, reset kilometers and the immobilizer. Only what your model supports
 per the code is shown.
+
+## Downloading firmware
+
+The firmware tab downloads your scooter's firmware as a `.bin` into the phone's Downloads folder. For
+that you sign in with your **own** Egret account, by magic link, exactly like the official app. There is
+no password, the app only knows the magic link for this account.
+
+How to do it:
+
+1. **Enter your e-mail** and tap *Request magic link*.
+2. **Open the mail from Egret** and paste the link (or the token from it) into the field.
+3. Tap *Sign in*. Model, version as well as target unit then appear.
+4. **Look for firmware** (list, or a targeted check per unit) and on a hit tap *Download*. The `.bin`
+   lands in the Downloads folder.
+
+What happens behind it: `POST auth/magic` requests the mail, `GET auth/magic/<token>` signs you in, then
+the page queries `/firmware/...` with your token. All of this runs **directly** between your browser and
+api.my-egret.com, exactly like the app. Nothing goes to the developer, there is no server of this
+project. The token stays in memory only and is gone on sign out. Credentials and token are always
+redacted in the log.
+
+Honest note: the tab only downloads, it does not flash anything to the scooter. The login, verify as
+well as query path is proven from the app code. What is not firmly documented is whether the actual
+`.bin` host allows the download directly in the browser. If the direct download fails, the page opens
+the file as a link and the browser saves it through the normal download menu.
 
 ## Legal note
 

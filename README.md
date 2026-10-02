@@ -6,10 +6,17 @@ model it sets the maximum speed, switches the ride mode, locks and unlocks the v
 display settings, straight from the browser. Nothing to install: no app store, no signing, no
 developer account. It runs in **Bluefy** on iOS and in **Chrome** or **Edge** on Android or desktop.
 
-> **This is a feasibility study.** It exists to show what Egret's Bluetooth protocol makes
-> possible, not to be a finished product. The protocol was reconstructed from the official app
-> (de.walberg.egret 2.0.60) and is documented byte for byte. Error-free operation is not promised and
-> there is no warranty of any kind. Whatever you do with it, you do at your own risk.
+> **This is a feasibility study - the speed write is sent, its effect is unconfirmed on hardware, and on
+> the Egret Unit it is proven ineffective.** It exists to show what Egret's Bluetooth protocol makes
+> possible, not to be a finished product; the protocol was reconstructed from the official app
+> (de.walberg.egret 2.0.60) and is documented byte for byte. The `SetSpeedLimit` write (opcode `08` on
+> characteristic `BCCAE7E1`) is sent on request, but the real top-speed cap sits in the encrypted
+> controller firmware, which a Bluetooth write to the display cannot reach: reverse-engineering the
+> display firmware showed opcode `08` is a no-op on the Unit, so nothing changes there, while on models
+> where the vendor app itself uses the command (the GTs) an effect is only inferred, not confirmed on a
+> real vehicle. **Reading works:** live telemetry, battery, speed and lock state are decoded and shown.
+> Error-free operation is not promised and there is no warranty of any kind. Whatever you do with it,
+> you do at your own risk - read the [Legal](#legal) section before you connect a scooter.
 
 **Open the web app: [laufbursche42.github.io/eg-unlock](https://laufbursche42.github.io/eg-unlock/)**
 
@@ -50,8 +57,10 @@ Every model the app knows is covered:
 Not every model can be made faster over Bluetooth, and the page reflects that:
 
 - The modern family uses the `SetSpeedLimit` command (up to 45 km/h). This command is not model-gated
-  in the app code, so it is offered for all modern models. Whether the controller firmware actually
-  rides a value above the approved limit is only shown by a test on the device.
+  in the app code, so it is offered for all modern models. Whether the controller firmware rides a
+  value above the approved limit is unconfirmed, and reverse-engineering the display firmware showed it
+  is a no-op on the **Unit** (the real cap sits in the encrypted controller) - so on the Unit it has no
+  effect, while on the GTs the vendor app uses the command itself.
 - On the EY family the speed lever is the **X-mode**, and the app code has it only for **EY1, EY2 and
   EY2p**. EY3, EY6, EY6p, EY7 and EYS have gears only, so their tunability is left open and marked as
   such.

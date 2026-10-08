@@ -8,7 +8,7 @@
  */
 
 // The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
-const BUILD = 'v15';
+const BUILD = 'v16';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -24,6 +24,8 @@ const U = {
   DIA_STAT:'2b419d92-adef-4ca3-8652-c02093b6c84e',
   BAT_SVC: 'f4b68c10-9e9e-4b97-a9c9-272e32453252',
   BAT_LVL: 'f4b68c11-9e9e-4b97-a9c9-272e32453252',
+  BAT_FW:  'f4b68c12-9e9e-4b97-a9c9-272e32453252',
+  BAT_INFO:'f4b68c13-9e9e-4b97-a9c9-272e32453252',
   BAT_DIAG:'f4b68c14-9e9e-4b97-a9c9-272e32453252',
   ID_SVC:  '70d1b670-eba5-4d76-868f-6d1b66108fdc',
   BAT_STD_SVC: '0000180f-0000-1000-8000-00805f9b34fb',
@@ -108,7 +110,7 @@ function anonymize(s) {
   return redact(String(s).replace(/\x01[^\x01]*\x01/g, 'XX').replace(/\x01/g, ''));
 }
 function logLine(cls, text) {
-  const safe = maskSecrets(text);   // scrub secrets before anything is stored or shown
+  const safe = '[' + new Date().toTimeString().slice(0, 8) + '] ' + maskSecrets(text);   // local [HH:MM:SS] + scrub secrets before anything is stored or shown
   logBuffer.push({ raw: safe, cls: cls });
   const el = $('log'); if (!el) return;
   const span = document.createElement('span');
@@ -140,7 +142,7 @@ const logSys = (t) => logLine('', '--- ' + t);
 const logErr = (t) => logLine('log-err', '!!! ' + t);
 const logDiag = (t) => { if (diag) logLine('', '... ' + t); };   // verbose, only when diagnostics on
 function setTile(id, val) { const el = $(id); if (el) el.textContent = (val == null ? '-' : val); }
-function resetTiles() { ['t-speed','t-batt','t-mode','t-lock','t-light','t-range','t-volt','t-current','t-power','t-throttle','t-odo','t-temp','t-charge','t-err','t-fw','t-serial'].forEach(id => setTile(id, null)); }
+function resetTiles() { ['t-speed','t-batt','t-mode','t-lock','t-light','t-range','t-volt','t-current','t-power','t-throttle','t-odo','t-trip','t-temp','t-rpm','t-rangefactor','t-poweredon','t-tempstate','t-charge','t-err','t-fw','t-serial','t-batttemp','t-cycles','t-capacity','t-battfw'].forEach(id => setTile(id, null)); }
 // Big-endian unsigned 24-bit read, used for the odometer fields.
 function uInt24(b, i) { return (b[i] << 16) | (b[i + 1] << 8) | b[i + 2]; }
 const asciiOf = (b) => b.filter(x => x >= 32 && x < 127).map(x => String.fromCharCode(x)).join('');
@@ -151,14 +153,13 @@ function transportDesc(c) {
 }
 function logDiagnosticHeader() {
   logLine('', '=== eg-unlock diagnostic ===');
-  logLine('', 'time: ' + new Date().toISOString());
   logLine('', 'build: ' + BUILD);
-  logLine('', 'userAgent: ' + navigator.userAgent);
+  logLine('', 'time: ' + new Date().toISOString());
+  logLine('', 'userAgent: ' + (navigator.userAgent || '?'));
   logLine('', 'platform: ' + (navigator.platform || '?'));
   logLine('', 'webBluetooth: ' + (navigator.bluetooth ? 'yes' : 'no'));
-  logLine('', '============================');
-  const c = cap();
-  logLine('', 'model: ' + (c ? c.label : 'auto detect') + ' [' + transportDesc(c) + ']');
+  logLine('', 'protocol self-test: ' + (eyOk ? 'OK' : 'FAILED'));
+  logLine('', '================================');
 }
 
 // --------------------------- i18n ---------------------------
@@ -194,7 +195,7 @@ function initLangSwitch() {
 function applyTheme(dark) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   const b = $('btn-theme');
-  if (b) { b.innerHTML = dark ? '&#9728;' : '&#9790;'; b.setAttribute('aria-label', t(dark ? 'themeToLight' : 'themeToDark')); b.title = b.getAttribute('aria-label'); } // scan-ok: fixed character (sun/moon), not user input
+  if (b) { b.textContent = dark ? '\u2600' : '\u263E'; b.setAttribute('aria-label', t(dark ? 'themeToLight' : 'themeToDark')); b.title = b.getAttribute('aria-label'); }
   try { localStorage.setItem(LS.THEME, dark ? 'dark' : 'light'); } catch (e) {}
 }
 function initTheme() {
@@ -229,11 +230,14 @@ function applyModelUI() {
   const isModern = c && c.fam === 'modern';
   const isEy = c && c.fam === 'ey';
   // Connection-gated cards: nothing device-facing shows until connected (header, getting-started,
-  // model+connect and the log stay visible; those are not toggled here).
-  show('card-live', connected);
-  show('card-more', connected && (isModern || isEy));
+  // model+connect and the log stay visible; those are not toggled here). Canonical shell card ids.
+  show('live-card', connected);
+  show('batt-card', connected);
+  show('more-card', connected);
+  show('raw-card', connected);
+  show('card-fw', connected);
   show('card-immob', connected);
-  // Family-specific speed cards (also connection-gated)
+  // Family-specific groups inside the settings card (also connection-gated)
   show('card-speed', connected && isModern && c.speed);
   show('card-ey', connected && isEy);
   show('card-mode', connected && isModern);
@@ -338,38 +342,55 @@ async function startModern() {
   await tryRead(U.BAT_LVL, b => { if (b.length) setTile('t-batt', b[0] + ' %'); });
   await tryRead(U.OP_ODO, parseOdo);
   await tryRead(U.BAT_DIAG, parseBatDiag);
+  await tryRead(U.BAT_INFO, parseBatInfo);
+  await tryRead(U.BAT_FW, b => setTile('t-battfw', asciiOf(b) || '-'));
   await tryRead(U.DEV_SERIAL, b => setTile('t-serial', asciiOf(b) || '-'));
   await tryRead(U.DEV_FW, b => setTile('t-fw', asciiOf(b) || '-'));
 }
 function parseOpStatus(b) {
   if (b.length < 14) return;
   const f = b[0];
+  setTile('t-poweredon', (f & 1) ? t('valOn') : t('valOff'));   // byte0 bit0 poweredOn (OperationStatus.java:225)
   setTile('t-lock', (f & 2) ? t('valLocked') : t('valOpen'));
   setTile('t-light', (f & 4) ? t('valOn') : t('valOff'));
   setTile('t-charge', (f & 8) ? t('valOn') : t('valOff'));
+  // byte0 bit4/bit5 temperatureLow/temperatureHigh (OperationStatus.java:229-230)
+  setTile('t-tempstate', (f & 32) ? t('twHigh') : ((f & 16) ? t('twLow') : t('valNormal')));
   setTile('t-speed', (((b[1] << 8) | b[2]) / 10).toFixed(1));
   setTile('t-power', b[3] + ' %');
   setTile('t-throttle', b[11] + ' %');
+  setTile('t-rangefactor', b[10] + ' %');   // byte10 rangeFactor (OperationStatus.java:236)
   const eco = ((b[4] << 8) | b[5]) / 10, tour = ((b[6] << 8) | b[7]) / 10, sport = ((b[8] << 8) | b[9]) / 10;
   setTile('t-range', Math.max(eco, tour, sport).toFixed(0) + ' km');
   setTile('t-mode', MODE_NAMES[b[12]] || ('mode ' + b[12]));
   setTile('t-err', b[13] === 0 ? '-' : ('code ' + b[13]));
 }
-// Motor temperature from the diagnostics status (live).
-function parseDiag(b) { if (b.length >= 2) setTile('t-temp', (((b[0] << 8) | b[1]) / 10).toFixed(1) + ' C'); }
+// Motor temperature and motor RPM from the diagnostics status (live, ScooterDiagnostic.java:86).
+function parseDiag(b) {
+  if (b.length >= 2) setTile('t-temp', (((b[0] << 8) | b[1]) / 10).toFixed(1) + ' C');
+  if (b.length >= 4) setTile('t-rpm', (((b[2] << 8) | b[3]) & 0xffff) + ' rpm');   // byte2-3 motorRpm (u16)
+}
 // Odometer: total distance as big-endian 24-bit. The app divides by 10 only for the Unit (proven,
 // decomp.js:844322-844336); other models pass the value through unchanged.
 function parseOdo(b) {
   if (b.length < 5) return;
+  setTile('t-trip', (((b[0] << 8) | b[1]) / 10).toFixed(1) + ' km');   // byte0-1 tripHectoMeters /10 = km (OdoStatus.java:135)
   const c = cap();
   const total = (c && c.note === 'unit') ? uInt24(b, 2) / 10 : uInt24(b, 2);
   setTile('t-odo', total.toFixed(total < 100 ? 1 : 0) + ' km');
 }
-// Battery diagnostics: voltage and current (temperature offset 2740 is used for the battery temp).
+// Battery diagnostics: temperature, voltage and current (BatteryDiagnostic.java:101).
 function parseBatDiag(b) {
   if (b.length < 6) return;
+  setTile('t-batttemp', ((((b[0] << 8) | b[1]) - 2740) / 10).toFixed(1) + ' C');   // byte0-1 (u16-2740)/10 (offset BatteryDiagnosticsKt.java:9)
   setTile('t-volt', (((b[2] << 8) | b[3]) / 10).toFixed(1) + ' V');
   setTile('t-current', (((b[4] << 8) | b[5]) / 10).toFixed(1) + ' A');
+}
+// Battery info: charge cycles and full-charge capacity (BatteryInfo.java:90).
+function parseBatInfo(b) {
+  if (b.length < 4) return;
+  setTile('t-cycles', ((b[0] << 8) | b[1]) + '');          // byte0-1 chargeCycles (u16)
+  setTile('t-capacity', ((b[2] << 8) | b[3]) + ' mAh');    // byte2-3 fullChargeCapacity (u16 mAh)
 }
 // SETTINGS_STATUS (BCCAE7E2, Settings.fromBytes): byte0 bit2 = speedLimitEnabled, byte11 = speed limit
 // (the byte equals km/h on current firmware). Read live so one button can label itself from device state.
@@ -435,7 +456,8 @@ function decodeEy(frame) {
   if (func === 0x01 && data.length >= 6) {
     setTile('t-batt', data[0] + ' %');
     setTile('t-speed', (((data[1] << 7) | data[2]) / 10).toFixed(1));
-    setTile('t-mode', MODE_NAMES[data[3] & 7] || ('mode ' + (data[3] & 7)));
+    setTile('t-mode', t('gearPrefix') + (data[3] & 7));   // EY drivingMode = gear int (EyBasicData.java:145), not the modern ride-mode enum
+
     setTile('t-lock', (data[5] & 0x20) ? t('valLocked') : t('valOpen'));
     setTile('t-light', (data[5] & 0x08) ? t('valOn') : t('valOff'));
   }
@@ -469,9 +491,8 @@ function eySelfTest() {
     ['xmode',   eyFrame(0x23, 0x05, [0x80, 0x00]), [0x50,0x28,0x09,0x08,0x0C,0x8F,0x10,0x19,0xC9]]
   ];
   let ok = true;
-  for (const [n, got, exp] of cases) if (got.length !== exp.length || got.some((v, i) => v !== exp[i])) { ok = false; logErr('EY self-test ' + n + ' FAILED'); }
-  logSys(ok ? 'EY self-test ok (CRC16 and scramble match)' : 'EY self-test failed');
-  return ok;
+  for (const [n, got, exp] of cases) if (got.length !== exp.length || got.some((v, i) => v !== exp[i])) { ok = false; }
+  return ok;   // result is reported via the diagnostic header's "protocol self-test:" line
 }
 let eyOk = true;
 async function eyGear(sel) {
@@ -575,7 +596,7 @@ function wireDocViewer() {
 }
 
 // --------------------------- help ---------------------------
-const HELP = { speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], firmware: ['fwTitleHelp', 'fwHelpHtml'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
+const HELP = { batt: ['help_batt_t', 'help_batt_b'], speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], firmware: ['fwTitleHelp', 'fwHelpHtml'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
 function openHelp(key) {
   const m = HELP[key]; if (!m) return; const dlg = $('help'); if (!dlg) return;
   $('help-title').textContent = t(m[0]);
@@ -790,8 +811,8 @@ window.addEventListener('DOMContentLoaded', () => {
   try { const k = localStorage.getItem(LS.EKFV); if (k && $('ekfv-in')) $('ekfv-in').value = k; } catch (e) {}
   applyLang();
   setStatus('disconnected');
-  logDiagnosticHeader();
   eyOk = eySelfTest();
+  logDiagnosticHeader();
 
   $('model-in').addEventListener('change', e => { setModel(e.target.value, true); const c = cap(); logLine('', 'model: ' + (c ? c.label : 'auto detect') + ' [' + transportDesc(c) + ']'); });
   $('btn-conn').addEventListener('click', () => { if ($('btn-conn').dataset.act === 'disconnect') disconnect(); else guard(connect); });
@@ -852,7 +873,7 @@ window.addEventListener('DOMContentLoaded', () => {
       diag = false; cb.checked = false;
       cb.addEventListener('change', () => { diag = cb.checked; logSys(diag ? 'diagnostic log on' : 'diagnostic log off'); if (diag) logDiagnosticHeader(); });
     } }
-  $('btn-clear-log').addEventListener('click', () => { logBuffer = []; $('log').textContent = ''; logDiagnosticHeader(); eyOk = eySelfTest(); });
+  $('btn-clear-log').addEventListener('click', () => { logBuffer = []; $('log').textContent = ''; eyOk = eySelfTest(); logDiagnosticHeader(); });
   $('btn-copy-log').addEventListener('click', () => navigator.clipboard.writeText(logText()).then(() => logSys('log copied')).catch(() => {}));
   $('btn-save-log').addEventListener('click', saveLog);
 });

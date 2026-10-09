@@ -8,7 +8,7 @@
  */
 
 // The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
-const BUILD = 'v17';
+const BUILD = 'v18';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -866,7 +866,7 @@ window.addEventListener('DOMContentLoaded', () => {
       let saved = null; try { saved = localStorage.getItem(LS.PUBLOG); } catch (e) {}
       publicLog = saved !== '0';
       cb.checked = publicLog;
-      cb.addEventListener('change', () => { publicLog = cb.checked; try { localStorage.setItem(LS.PUBLOG, cb.checked ? '1' : '0'); } catch (e) {} renderLog(); });
+      cb.addEventListener('change', () => { publicLog = cb.checked; try { localStorage.setItem(LS.PUBLOG, cb.checked ? '1' : '0'); } catch (e) {} logSys('public-log: ' + (cb.checked ? 'on (anonymizing device name/id)' : 'off')); renderLog(); });
     } }
   { const cb = $('diag-log');
     if (cb) {

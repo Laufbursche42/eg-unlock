@@ -8,7 +8,7 @@
  */
 
 // The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
-const BUILD = 'v18';
+const BUILD = 'v19';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -178,6 +178,7 @@ function applyLang() {
   { const el = $('link-license'); if (el) el.href = docFile('LICENSE'); }
   { const el = $('link-privacy'); if (el) el.href = docFile('PRIVACY'); }
   { const el = $('link-trademarks'); if (el) el.href = docFile('TRADEMARKS'); }
+  { const el = $('link-disclaimer'); if (el) el.href = docFile('DISCLAIMER'); }
   { const el = $('langs'); if (el) el.setAttribute('aria-label', t('langGroup')); }
   { const el = $('build-ver'); if (el) el.textContent = t('buildLabel') + ' ' + BUILD; }
   document.querySelectorAll('#langs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
@@ -585,7 +586,7 @@ function openDocFile(file, titleKey) {
 function wireDocViewer() {
   document.addEventListener('click', e => {
     if (!e.target.closest) return;
-    const disc = e.target.closest('[data-open-disclaimer]'); if (disc) { e.preventDefault(); openHelp('disclaimer'); return; }
+    const disc = e.target.closest('[data-open-disclaimer]'); if (disc) { e.preventDefault(); openDocFile(docFile('DISCLAIMER'), 'footDisclaimer'); return; }
     const a = e.target.closest('[data-doc], [data-docfile]'); if (!a) return;
     e.preventDefault();
     const file = a.getAttribute('data-docfile');
@@ -596,7 +597,7 @@ function wireDocViewer() {
 }
 
 // --------------------------- help ---------------------------
-const HELP = { batt: ['help_batt_t', 'help_batt_b'], speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], firmware: ['fwTitleHelp', 'fwHelpHtml'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
+const HELP = { batt: ['help_batt_t', 'help_batt_b'], speed: ['s3Title', 'speedValuesHint'], ey: ['eyTitle', 'eyGearHint'], mode: ['modeTitle', 'modeHint'], more: ['moreTitle', 'moreHint'], immob: ['immobTitle', 'immobHint'], firmware: ['fwTitleHelp', 'fwHelpHtml'], publiclog: ['publicLogTitle', 'publicLogHelpHtml'], diaglog: ['diagLogTitle', 'diagLogHelpHtml'] };
 function openHelp(key) {
   const m = HELP[key]; if (!m) return; const dlg = $('help'); if (!dlg) return;
   $('help-title').textContent = t(m[0]);
@@ -858,7 +859,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });
-  { const b = $('link-disclaimer'); if (b) b.addEventListener('click', e => { e.preventDefault(); openHelp('disclaimer'); }); }
+  { const b = $('link-disclaimer'); if (b) b.addEventListener('click', e => { e.preventDefault(); openDocFile(docFile('DISCLAIMER'), 'footDisclaimer'); }); }
 
   // Log options: Public Log anonymizes (default on, persisted); diagnostics adds verbose lines (off).
   { const cb = $('public-log');

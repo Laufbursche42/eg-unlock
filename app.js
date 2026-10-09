@@ -8,7 +8,7 @@
  */
 
 // The pre-commit cache-buster auto-bumps BUILD and every ?v= in index.html on any web-asset change.
-const BUILD = 'v19';
+const BUILD = 'v20';
 
 // --------------------------- UUIDs (Web Bluetooth wants lowercase) ---------------------------
 const U = {
@@ -532,42 +532,72 @@ const DOC_TITLES = {
 };
 const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const slug = s => s.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/ /g, '-');
-function mdToHtml(src) {
-  const inline = s => escHtml(s)
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// inlineMd receives ALREADY-escaped text (mdToHtml escapes first); DOC_TITLES hrefs stay in-modal.
+function inlineMd(s) {
+  return s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, text, href) => {
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, text, href) {
       if (DOC_TITLES[href]) return '<a href="' + href + '" data-docfile="' + href + '">' + text + '</a>';
       return '<a href="' + href + '" target="_blank" rel="noopener">' + text + '</a>';
     });
-  const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
-  const out = []; let para = [], inFence = false, listKind = null;
-  const flushPara = () => { if (para.length) { out.push('<p>' + inline(para.join(' ')) + '</p>'); para = []; } };
-  const closeList = () => { if (listKind) { out.push('</' + listKind + '>'); listKind = null; } };
-  const cells = l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i], body = l.trim();
-    if (inFence) { if (body.startsWith('```')) { out.push('</code></pre>'); inFence = false; } else out.push(escHtml(l)); continue; }
-    if (body.startsWith('```')) { flushPara(); closeList(); out.push('<pre><code>'); inFence = true; continue; }
-    if (body === '') { flushPara(); closeList(); continue; }
-    if (/^(-{3,})\s*$/.test(body)) { flushPara(); closeList(); out.push('<hr>'); continue; }
-    { const bq = body.match(/^>\s?(.*)$/); if (bq) { flushPara(); closeList(); out.push('<blockquote>' + inline(bq[1]) + '</blockquote>'); continue; } }
-    if (body.startsWith('|') && /^\|[\s:|-]+\|?\s*$/.test((lines[i + 1] || '').trim())) {
-      flushPara(); closeList();
-      out.push('<div class="doc-table"><table><thead><tr>' + cells(body).map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>');
-      i++;
-      while (i + 1 < lines.length && lines[i + 1].trim().startsWith('|')) out.push('<tr>' + cells(lines[++i].trim()).map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>');
-      out.push('</tbody></table></div>'); continue;
+}
+function mdToHtml(md) {
+  var codeBlocks = [];
+  // 1) pull fenced code blocks out first so their content is never treated as markdown
+  md = String(md).replace(/```[^\n]*\n?([\s\S]*?)```/g, function (m, code) {
+    var i = codeBlocks.length;
+    codeBlocks.push('<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
+    return '\x00CB' + i + '\x00';
+  });
+  var lines = md.split(/\r?\n/);
+  var out = [], para = [], list = null;
+  function flushPara() { if (para.length) { out.push('<p>' + inlineMd(esc(para.join(' '))) + '</p>'); para = []; } }
+  function flushList() { if (list) { out.push('<' + list.type + '>' + list.items.join('') + '</' + list.type + '>'); list = null; } }
+  function isTableSep(s) { var tt = s.replace(/\s/g, ''); return /^\|?:?-+:?(\|:?-+:?)+\|?$/.test(tt); }
+  function splitRow(s) { return s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); }
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var cb = ln.match(/^\x00CB(\d+)\x00$/);
+    if (cb) { flushPara(); flushList(); out.push(codeBlocks[Number(cb[1])]); continue; }
+    if (/^\s*$/.test(ln)) { flushPara(); flushList(); continue; }
+    var h = ln.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flushPara(); flushList(); var lvl = Math.min(h[1].length, 4); out.push('<h' + lvl + '>' + inlineMd(esc(h[2])) + '</h' + lvl + '>'); continue; }
+    if (/^---+$/.test(ln.trim())) { flushPara(); flushList(); out.push('<hr>'); continue; }
+    if (ln.indexOf('|') >= 0 && i + 1 < lines.length && isTableSep(lines[i + 1])) {   // GFM table: header, |---| sep, rows
+      flushPara(); flushList();
+      var head = splitRow(ln); i++;   // consume the separator row
+      var body = '';
+      while (i + 1 < lines.length && lines[i + 1].indexOf('|') >= 0 && lines[i + 1].trim() !== '') {
+        body += '<tr>' + splitRow(lines[++i]).map(function (c) { return '<td>' + inlineMd(esc(c)) + '</td>'; }).join('') + '</tr>';
+      }
+      out.push('<table><thead><tr>' + head.map(function (c) { return '<th>' + inlineMd(esc(c)) + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table>');
+      continue;
     }
-    let m;
-    if ((m = body.match(/^(#{1,4})\s+(.*)$/))) { flushPara(); closeList(); const n = m[1].length; out.push('<h' + n + ' id="' + slug(m[2]) + '">' + inline(m[2]) + '</h' + n + '>'); continue; }
-    if ((m = body.match(/^[-*]\s+(.*)$/))) { flushPara(); if (listKind !== 'ul') { closeList(); out.push('<ul>'); listKind = 'ul'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
-    if ((m = body.match(/^\d+\.\s+(.*)$/))) { flushPara(); if (listKind !== 'ol') { closeList(); out.push('<ol>'); listKind = 'ol'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
-    closeList(); para.push(body);
+    if (/^\s*>/.test(ln)) {                             // merge consecutive > lines into ONE callout
+      flushPara(); flushList();
+      var q = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, '')); i++; }
+      i--;                                              // step back; the for-loop re-increments
+      while (q.length && /^\s*$/.test(q[0])) q.shift();
+      while (q.length && /^\s*$/.test(q[q.length - 1])) q.pop();
+      if (q.length) out.push('<blockquote>' + mdToHtml(q.join('\n')) + '</blockquote>');  // inner rendered as markdown
+      continue;
+    }
+    var ul = ln.match(/^\s*[-*]\s+(.*)$/);
+    var ol = ln.match(/^\s*\d+\.\s+(.*)$/);
+    if (ul || ol) {
+      flushPara();
+      var type = ul ? 'ul' : 'ol';
+      if (!list || list.type !== type) { flushList(); list = { type: type, items: [] }; }
+      list.items.push('<li>' + inlineMd(esc((ul ? ul[1] : ol[1]))) + '</li>');
+      continue;
+    }
+    para.push(ln.trim());
   }
-  if (inFence) out.push('</code></pre>');
-  flushPara(); closeList();
-  return out.join('\n').replace(/<pre><code>\n/g, '<pre><code>');
+  flushPara(); flushList();
+  return out.join('\n');
 }
 const docCache = {};
 const docFile = name => { if (name === 'GUIDE') return 'GUIDE.' + lang + '.md'; if (name === 'README') return 'README.md'; return lang === 'de' ? name + '.de.md' : name + '.md'; };

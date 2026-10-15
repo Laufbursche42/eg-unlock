@@ -3,6 +3,10 @@
 Notable changes to Laufbursche Egret unlock, newest first. The version is the `BUILD` value in
 `app.js`, mirrored in the `?v=` cache-buster on the script and style tags.
 
+## v22
+
+- Report button: unified prefilled-issue template (scooter, page, version and the debug log auto-attached), real umlauts, dropped the old column checklist.
+
 ## v15
 
 - New **Firmware** tab: sign in with your own Egret account by magic link and download your scooter's
